@@ -46,6 +46,7 @@ import com.sun.tools.javac.tree.TreeMaker;
 import com.sun.tools.javac.tree.JCTree.JCAnnotation;
 import com.sun.tools.javac.tree.JCTree.JCAssign;
 import com.sun.tools.javac.tree.JCTree.JCBlock;
+import com.sun.tools.javac.tree.JCTree.JCClassDecl;
 import com.sun.tools.javac.tree.JCTree.JCExpression;
 import com.sun.tools.javac.tree.JCTree.JCFieldAccess;
 import com.sun.tools.javac.tree.JCTree.JCMethodDecl;
@@ -86,28 +87,32 @@ public class HandleSetter implements JavacAnnotationHandler<Setter> {
 			}
 		}
 		
-		createSetterForField(AccessLevel.PUBLIC, fieldNode, fieldNode, false);
+		createSetterForField(AccessLevel.PUBLIC, fieldNode, fieldNode, false, false);
 	}
 	
 	@Override public boolean handle(AnnotationValues<Setter> annotation, JCAnnotation ast, JavacNode annotationNode) {
 		markAnnotationAsProcessed(annotationNode, Setter.class);
 		JavacNode fieldNode = annotationNode.up();
-		AccessLevel level = annotation.getInstance().value();
+		Setter annotationInstance = annotation.getInstance();
+		AccessLevel level = annotationInstance.value();
+		boolean fluent = annotationInstance.fluent();
 		
 		if (level == AccessLevel.NONE) return true;
 		
-		return createSetterForField(level, fieldNode, annotationNode, true);
+		return createSetterForField(level, fieldNode, annotationNode, true, fluent);
 	}
 	
 	private boolean createSetterForField(AccessLevel level,
-			JavacNode fieldNode, JavacNode errorNode, boolean whineIfExists) {
+			JavacNode fieldNode, JavacNode errorNode, boolean whineIfExists, boolean fluent) {
 		if (fieldNode.getKind() != Kind.FIELD) {
 			fieldNode.addError("@Setter is only supported on a field.");
 			return true;
 		}
 		
 		JCVariableDecl fieldDecl = (JCVariableDecl)fieldNode.get();
-		String methodName = toSetterName(fieldDecl);
+		
+		// TODO: handle clash between fluent & non-fluent setters 
+		String methodName = fluent ? toFluentSetterName(fieldDecl) : toSetterName(fieldDecl);
 		
 		switch (methodExists(methodName, fieldNode, false)) {
 		case EXISTS_BY_LOMBOK:
@@ -124,12 +129,12 @@ public class HandleSetter implements JavacAnnotationHandler<Setter> {
 		
 		long access = toJavacModifier(level) | (fieldDecl.mods.flags & Flags.STATIC);
 		
-		injectMethod(fieldNode.up(), createSetter(access, fieldNode, fieldNode.getTreeMaker()));
+		injectMethod(fieldNode.up(), createSetter(access, fluent, fieldNode, fieldNode.getTreeMaker()));
 		
 		return true;
 	}
 	
-	private JCMethodDecl createSetter(long access, JavacNode field, TreeMaker treeMaker) {
+	private JCMethodDecl createSetter(long access, boolean fluent, JavacNode field, TreeMaker treeMaker) {
 		JCVariableDecl fieldDecl = (JCVariableDecl) field.get();
 		
 		JCFieldAccess thisX = treeMaker.Select(treeMaker.Ident(field.toName("this")), fieldDecl.name);
@@ -139,6 +144,7 @@ public class HandleSetter implements JavacAnnotationHandler<Setter> {
 		List<JCAnnotation> nonNulls = findAnnotations(field, TransformationsUtil.NON_NULL_PATTERN);
 		List<JCAnnotation> nullables = findAnnotations(field, TransformationsUtil.NULLABLE_PATTERN);
 		
+
 		if (nonNulls.isEmpty()) {
 			statements = List.<JCStatement>of(treeMaker.Exec(assign));
 		} else {
@@ -147,11 +153,24 @@ public class HandleSetter implements JavacAnnotationHandler<Setter> {
 			else statements = List.<JCStatement>of(treeMaker.Exec(assign));
 		}
 		
+		if (fluent) {
+			JCStatement returnStatement = treeMaker.Return(treeMaker.Ident(field.toName("this")));
+			statements = statements.append(returnStatement);
+		}
+		
 		JCBlock methodBody = treeMaker.Block(0, statements);
-		Name methodName = field.toName(toSetterName(fieldDecl));
+		Name methodName = field.toName(fluent ? toFluentSetterName(fieldDecl) : toSetterName(fieldDecl));
 		JCVariableDecl param = treeMaker.VarDef(treeMaker.Modifiers(Flags.FINAL, nonNulls.appendList(nullables)), fieldDecl.name, fieldDecl.vartype, null);
 		//WARNING: Do not use field.getSymbolTable().voidType - that field has gone through non-backwards compatible API changes within javac1.6.
-		JCExpression methodType = treeMaker.Type(new JCNoType(TypeTags.VOID));
+		JCExpression methodType;
+		if (fluent) {
+			JCClassDecl classNode = (JCClassDecl) field.up().get();
+			// TODO: handle parameterized types
+			methodType = treeMaker.Ident(classNode.name);
+		} else {
+			methodType = treeMaker.Type(new JCNoType(TypeTags.VOID));
+		}
+
 		
 		List<JCTypeParameter> methodGenericParams = List.nil();
 		List<JCVariableDecl> parameters = List.of(param);

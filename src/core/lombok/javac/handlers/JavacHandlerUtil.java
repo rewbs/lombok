@@ -153,6 +153,17 @@ public class JavacHandlerUtil {
 		return TransformationsUtil.toSetterName(fieldName);
 	}
 	
+	/**
+	 * @return the likely fluent setter name for the stated field. (e.g. private boolean foo; to setFoo).
+	 * 
+	 * Convenient wrapper around {@link TransformationsUtil#toFluentSetterName(CharSequence)}.
+	 */
+	public static String toFluentSetterName(JCVariableDecl field) {
+		CharSequence fieldName = field.name;
+
+		return TransformationsUtil.toFluentSetterName(fieldName);
+	}
+	
 	/** Serves as return value for the methods that check for the existence of fields and methods. */
 	public enum MemberExistsResult {
 		NOT_EXISTS, EXISTS_BY_USER, EXISTS_BY_LOMBOK;

@@ -116,6 +116,14 @@ public class TransformationsUtil {
 		return String.format("%s%s", prefix, suffix);
 	}
 	
+	/**
+	 * @param fieldName the name of the field
+	 * @return the fluent setter name for this field - same as the field name.
+	 */
+	public static String toFluentSetterName(CharSequence fieldName) {
+		return fieldName.toString();
+	}
+	
 	public static List<String> toAllGetterNames(CharSequence fieldName, boolean isBoolean) {
 		if (!isBoolean) return Collections.singletonList(toGetterName(fieldName, false));
 		
@@ -146,4 +154,6 @@ public class TransformationsUtil {
 		
 		return new ArrayList<String>(names);
 	}
+
+
 }

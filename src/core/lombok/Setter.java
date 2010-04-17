@@ -52,4 +52,5 @@ public @interface Setter {
 	 * If you want your setter to be non-public, you can specify an alternate access level here.
 	 */
 	lombok.AccessLevel value() default lombok.AccessLevel.PUBLIC;
+	boolean fluent() default false;
 }
