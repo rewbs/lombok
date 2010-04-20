@@ -165,8 +165,19 @@ public class HandleSetter implements JavacAnnotationHandler<Setter> {
 		JCExpression methodType;
 		if (fluent) {
 			JCClassDecl classNode = (JCClassDecl) field.up().get();
-			// TODO: handle parameterized types
-			methodType = treeMaker.Ident(classNode.name);
+			
+			if (!classNode.typarams.isEmpty()) {
+				// Paramterized type
+				List<JCExpression> typeArgs = List.nil();
+				for (JCTypeParameter typeparam : classNode.typarams) {
+					typeArgs = typeArgs.append(treeMaker.Ident(typeparam.name));
+				}
+				methodType = treeMaker.TypeApply(treeMaker.Ident(classNode.name), typeArgs);
+			} else {
+				methodType = treeMaker.Ident(classNode.name);
+			}
+			
+			
 		} else {
 			methodType = treeMaker.Type(new JCNoType(TypeTags.VOID));
 		}
